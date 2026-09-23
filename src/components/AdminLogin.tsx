@@ -14,7 +14,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
     e.preventDefault();
     const expected = (import.meta as any).env?.VITE_ADMIN_PASSWORD as string | undefined;
     // Jika ENV belum di-set (development), pakai fallback 'admin123' agar bisa dicoba lokal
-    const validPassword = expected && expected !== '' ? expected : 'admin123';
+    const validPassword = expected && expected !== '' ? expected : '';
     if (password === validPassword) {
       sessionStorage.setItem('admin_auth', 'true');
       setError('');
