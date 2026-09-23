@@ -2,7 +2,26 @@ import React, { useState } from 'react';
 import { useDataStore } from '../../context/DataContext';
 import { Student } from '../../types';
 import { AdminMediaUploader } from './AdminMediaUploader';
-import { Plus, Edit2, Trash2, Search, Check, X, Sparkles, User, Instagram } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Check, X, Sparkles, User, Instagram, Link as LinkIcon } from 'lucide-react';
+
+function extractInstagramUsername(input: string): string {
+  let s = input.trim();
+  if (!s) return 'alumni';
+  // Remove protocol and domain
+  s = s.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '');
+  s = s.replace(/^instagram\.com\//i, '');
+  s = s.replace(/^@/, '');
+  // Take first path segment before / ? &
+  s = s.split('/')[0].split('?')[0].split('&')[0].trim();
+  // Clean invalid chars, keep alphanumeric . _ 
+  s = s.replace(/[^a-zA-Z0-9._]/g, '');
+  return s || 'alumni';
+}
+
+function toInstagramLink(username: string): string {
+  const u = extractInstagramUsername(username);
+  return `https://instagram.com/${u}`;
+}
 
 export const ManageBiodataTab: React.FC = () => {
   const { students, addStudent, updateStudent, deleteStudent } = useDataStore();
@@ -73,7 +92,8 @@ export const ManageBiodataTab: React.FC = () => {
     setDream(student.dream || '');
     setMessage(student.message || '');
     setImpression(student.impression || '');
-    setInstagram(student.instagram || '');
+    // Show as full link for editing (was stored as @username)
+    setInstagram(student.instagram ? toInstagramLink(student.instagram) : '');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -101,7 +121,7 @@ export const ManageBiodataTab: React.FC = () => {
       dream: dream.trim() || '-',
       message: message.trim() || '-',
       impression: impression.trim() || '-',
-      instagram: instagram.trim().startsWith('@') ? instagram.trim() : `@${instagram.trim() || 'alumni'}`,
+      instagram: `@${extractInstagramUsername(instagram)}`,
     };
 
     if (editingId) {
@@ -201,20 +221,24 @@ export const ManageBiodataTab: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-[#CAAA98] mb-1">
-                  Username Instagram
+                  Link Profil Instagram
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A8678] text-xs">
-                    @
-                  </span>
+                  <LinkIcon className="w-3.5 h-3.5 text-[#9A8678] absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
-                    type="text"
-                    value={instagram.replace(/^@/, '')}
-                    onChange={(e) => setInstagram(`@${e.target.value}`)}
-                    placeholder="username_ig"
-                    className="w-full pl-8 pr-3.5 py-2.5 bg-[#202940] border border-[#4B4038] focus:border-[#CAAA98] rounded-xl text-xs text-white placeholder-[#9A8678] focus:outline-none transition-colors"
+                    type="url"
+                    value={instagram}
+                    onChange={(e) => setInstagram(e.target.value)}
+                    placeholder="https://instagram.com/username"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-[#202940] border border-[#4B4038] focus:border-[#CAAA98] rounded-xl text-xs text-white placeholder-[#9A8678] focus:outline-none transition-colors"
                   />
                 </div>
+                {instagram && (
+                  <p className="text-[11px] text-[#9A8678] mt-1.5">
+                    Akan disimpan: <span className="text-[#CAAA98]">@{extractInstagramUsername(instagram)}</span> → <span className="text-[#CAAA98] underline">{toInstagramLink(instagram)}</span>
+                  </p>
+                )}
+                <p className="text-[11px] text-[#9A8678] mt-1">Tempel link profil IG, bisa juga ketik username saja.</p>
               </div>
             </div>
 
