@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Student, Moment, GraduationData, VideoMoment } from '../types';
 import { STUDENTS, MOMENTS_FEED, GRADUATION_DATA, VIDEO_MOMENTS } from '../data/dummyData';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { mapStudentRow, mapMomentRow, mapVideoRow, mapGalleryRow, mapGraduationInfo, toStudentRow, toMomentRow, toVideoRow } from '../lib/mappers';
+import { adminOp, getToken } from '../lib/api';
 
 export interface ToastNotification { id: string; message: string; type: 'success' | 'error' | 'info'; }
 
 interface DataContextType {
   students: Student[]; moments: Moment[]; graduationData: GraduationData; videoMoments: VideoMoment[];
-  isLoading: boolean; isSupabaseConfigured: boolean;
+  isLoading: boolean; isApiConfigured: boolean;
   addMoment: (moment: Omit<Moment, 'id'>) => Promise<void>;
   updateMoment: (id: string, updated: Partial<Moment>) => Promise<void>;
   deleteMoment: (id: string) => Promise<void>;
@@ -38,6 +38,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [graduationData, setGraduationData] = useState<GraduationData>(GRADUATION_DATA);
   const [videoMoments, setVideoMoments] = useState<VideoMoment[]>(VIDEO_MOMENTS);
   const [isLoading, setIsLoading] = useState(false);
+  const [isApiConfigured, setIsApiConfigured] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -46,38 +48,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setTimeout(() => dismissToast(id), 4000);
   };
   const dismissToast = (id: string) => setToasts((prev) => prev.filter((t) => t.id !== id));
+  const reportError = (err: unknown) => showToast((err as Error).message || 'Terjadi kesalahan', 'error');
 
   const fetchAll = useCallback(async () => {
-    if (!isSupabaseConfigured || !supabase) return;
     setIsLoading(true);
     try {
-      const [stuRes, momRes, gradInfoRes, graduatesRes, galleryRes, vidRes] = await Promise.all([
-        supabase.from('students').select('*').order('created_at', { ascending: true }),
-        supabase.from('moments').select('*').order('created_at', { ascending: true }),
-        supabase.from('graduation_info').select('*').eq('id', 1).single(),
-        supabase.from('graduates').select('*').order('position', { ascending: true }),
-        supabase.from('graduation_gallery').select('*').order('created_at', { ascending: true }),
-        supabase.from('video_moments').select('*').order('created_at', { ascending: true }),
-      ]);
-      if (stuRes.data) setStudents(stuRes.data.map(mapStudentRow));
-      if (momRes.data) setMoments(momRes.data.map(mapMomentRow));
-      if (vidRes.data) setVideoMoments(vidRes.data.map(mapVideoRow));
-      const graduates = graduatesRes.data ? graduatesRes.data.map((r: any) => r.name) : GRADUATION_DATA.graduates;
-      const gallery = galleryRes.data ? galleryRes.data.map(mapGalleryRow) : GRADUATION_DATA.gallery;
-      if (gradInfoRes.data) setGraduationData(mapGraduationInfo(gradInfoRes.data, graduates, gallery));
-      else setGraduationData({ ...GRADUATION_DATA, graduates, gallery });
+      const res = await fetch('/api/data', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      setStudents((data.students ?? []).map(mapStudentRow));
+      setMoments((data.moments ?? []).map(mapMomentRow));
+      setVideoMoments((data.videos ?? []).map(mapVideoRow));
+
+      const graduates = data.graduates ?? [];
+      const gallery = (data.gallery ?? []).map(mapGalleryRow);
+      setGraduationData(
+        data.graduationInfo
+          ? mapGraduationInfo(data.graduationInfo, graduates, gallery)
+          : { ...GRADUATION_DATA, graduates, gallery }
+      );
+
+      setIsApiConfigured(true);
+      setDataReady(true);
     } catch (err) {
       console.error(err);
-      showToast('Gagal sync Supabase', 'error');
-    } finally { setIsLoading(false); }
+      setIsApiConfigured(false);
+      setDataReady(false);
+      showToast('Gagal memuat data dari server', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  useEffect(() => { if (isSupabaseConfigured) fetchAll(); }, [fetchAll]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Fallback dummy if not configured — keep local state
-  const ensureSupabase = () => {
-    if (!isSupabaseConfigured || !supabase) {
-      showToast('Supabase belum dikonfigurasi (isi ENV). Data hanya lokal.', 'info');
+  const ensureApi = () => {
+    if (!getToken()) {
+      showToast('Sesi login habis. Silakan login ulang.', 'error');
+      return false;
+    }
+    if (!dataReady) {
+      showToast('Data belum termuat dari server.', 'error');
       return false;
     }
     return true;
@@ -85,15 +97,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // --- STUDENTS ---
   const addStudent = async (data: Omit<Student, 'id'>) => {
+    if (!ensureApi()) return;
     const newStudent: Student = { ...data, id: `std-${Date.now()}` };
     setStudents((p) => [...p, newStudent]);
-    if (!ensureSupabase()) { showToast(`Biodata "${newStudent.name}" ditambah (lokal)`, 'success'); return; }
-    const { error } = await supabase!.from('students').insert(toStudentRow(newStudent));
-    if (error) showToast(error.message, 'error'); else showToast(`Biodata "${newStudent.name}" berhasil ditambah!`);
+    try {
+      await adminOp({ table: 'students', op: 'insert', row: toStudentRow(newStudent) });
+      showToast(`Biodata "${newStudent.name}" berhasil ditambah!`);
+    } catch (err) { reportError(err); }
   };
   const updateStudent = async (id: string, updated: Partial<Student>) => {
+    if (!ensureApi()) return;
     setStudents((p) => p.map((s) => s.id === id ? { ...s, ...updated } : s));
-    if (!ensureSupabase()) return;
     const row: any = {};
     if (updated.name !== undefined) row.name = updated.name;
     if (updated.nickname !== undefined) row.nickname = updated.nickname;
@@ -111,126 +125,181 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (updated.message !== undefined) row.message = updated.message;
     if (updated.impression !== undefined) row.impression = updated.impression;
     if (updated.instagram !== undefined) row.instagram = updated.instagram;
-    const { error } = await supabase!.from('students').update(row).eq('id', id);
-    if (error) showToast(error.message, 'error'); else showToast('Biodata diperbarui!');
+    try {
+      await adminOp({ table: 'students', op: 'update', id, row });
+      showToast('Biodata diperbarui!');
+    } catch (err) { reportError(err); }
   };
   const deleteStudent = async (id: string) => {
+    if (!ensureApi()) return;
     const target = students.find((s) => s.id === id);
     setStudents((p) => p.filter((s) => s.id !== id));
-    if (!ensureSupabase()) { showToast(`Profil "${target?.name}" dihapus (lokal)`, 'info'); return; }
-    const { error } = await supabase!.from('students').delete().eq('id', id);
-    if (error) showToast(error.message, 'error'); else showToast(`Profil "${target?.name}" dihapus.`, 'info');
+    try {
+      await adminOp({ table: 'students', op: 'delete', id });
+      showToast(`Profil "${target?.name}" dihapus.`, 'info');
+    } catch (err) { reportError(err); }
   };
 
   // --- MOMENTS ---
   const addMoment = async (data: Omit<Moment, 'id'>) => {
+    if (!ensureApi()) return;
     const nm: Moment = { ...data, id: `mom-${Date.now()}` };
     setMoments((p) => [nm, ...p]);
-    if (!ensureSupabase()) return;
-    const { error } = await supabase!.from('moments').insert(toMomentRow(nm));
-    if (error) showToast(error.message, 'error'); else showToast(`Momen "${nm.title}" ditambah!`);
+    try {
+      await adminOp({ table: 'moments', op: 'insert', row: toMomentRow(nm) });
+      showToast(`Momen "${nm.title}" ditambah!`);
+    } catch (err) { reportError(err); }
   };
   const updateMoment = async (id: string, updated: Partial<Moment>) => {
+    if (!ensureApi()) return;
     setMoments((p) => p.map((m) => m.id === id ? { ...m, ...updated } : m));
-    if (!ensureSupabase()) return;
-    const row: any = {}; if (updated.title !== undefined) row.title = updated.title; if (updated.image !== undefined) row.image = updated.image; if (updated.date !== undefined) row.date = updated.date; if (updated.story !== undefined) row.story = updated.story; if (updated.tag !== undefined) row.tag = updated.tag;
-    const { error } = await supabase!.from('moments').update(row).eq('id', id);
-    if (error) showToast(error.message, 'error'); else showToast('Momen diperbarui!');
+    const row: any = {};
+    if (updated.title !== undefined) row.title = updated.title;
+    if (updated.image !== undefined) row.image = updated.image;
+    if (updated.date !== undefined) row.date = updated.date;
+    if (updated.story !== undefined) row.story = updated.story;
+    if (updated.tag !== undefined) row.tag = updated.tag;
+    try {
+      await adminOp({ table: 'moments', op: 'update', id, row });
+      showToast('Momen diperbarui!');
+    } catch (err) { reportError(err); }
   };
   const deleteMoment = async (id: string) => {
+    if (!ensureApi()) return;
     const t = moments.find((m) => m.id === id);
     setMoments((p) => p.filter((m) => m.id !== id));
-    if (!ensureSupabase()) return;
-    const { error } = await supabase!.from('moments').delete().eq('id', id);
-    if (error) showToast(error.message, 'error'); else showToast(`Momen "${t?.title}" dihapus.`, 'info');
+    try {
+      await adminOp({ table: 'moments', op: 'delete', id });
+      showToast(`Momen "${t?.title}" dihapus.`, 'info');
+    } catch (err) { reportError(err); }
   };
 
   // --- VIDEOS ---
   const addVideoMoment = async (data: Omit<VideoMoment, 'id'>) => {
+    if (!ensureApi()) return;
     const nv: VideoMoment = { ...data, id: `vid-${Date.now()}` };
     setVideoMoments((p) => [nv, ...p]);
-    if (!ensureSupabase()) return;
-    const { error } = await supabase!.from('video_moments').insert(toVideoRow(nv));
-    if (error) showToast(error.message, 'error'); else showToast(`Video "${nv.title}" ditambah!`);
+    try {
+      await adminOp({ table: 'video_moments', op: 'insert', row: toVideoRow(nv) });
+      showToast(`Video "${nv.title}" ditambah!`);
+    } catch (err) { reportError(err); }
   };
   const updateVideoMoment = async (id: string, updated: Partial<VideoMoment>) => {
+    if (!ensureApi()) return;
     setVideoMoments((p) => p.map((v) => v.id === id ? { ...v, ...updated } : v));
-    if (!ensureSupabase()) return;
-    const row: any = {}; if (updated.title !== undefined) row.title = updated.title; if (updated.videoUrl !== undefined) row.video_url = updated.videoUrl; if (updated.posterUrl !== undefined) row.poster_url = updated.posterUrl; if (updated.duration !== undefined) row.duration = updated.duration; if (updated.date !== undefined) row.date = updated.date; if (updated.description !== undefined) row.description = updated.description;
-    const { error } = await supabase!.from('video_moments').update(row).eq('id', id);
-    if (error) showToast(error.message, 'error'); else showToast('Video diperbarui!');
+    const row: any = {};
+    if (updated.title !== undefined) row.title = updated.title;
+    if (updated.videoUrl !== undefined) row.video_url = updated.videoUrl;
+    if (updated.posterUrl !== undefined) row.poster_url = updated.posterUrl;
+    if (updated.duration !== undefined) row.duration = updated.duration;
+    if (updated.date !== undefined) row.date = updated.date;
+    if (updated.description !== undefined) row.description = updated.description;
+    try {
+      await adminOp({ table: 'video_moments', op: 'update', id, row });
+      showToast('Video diperbarui!');
+    } catch (err) { reportError(err); }
   };
   const deleteVideoMoment = async (id: string) => {
+    if (!ensureApi()) return;
     const t = videoMoments.find((v) => v.id === id);
     setVideoMoments((p) => p.filter((v) => v.id !== id));
-    if (!ensureSupabase()) return;
-    const { error } = await supabase!.from('video_moments').delete().eq('id', id);
-    if (error) showToast(error.message, 'error'); else showToast(`Video "${t?.title}" dihapus.`, 'info');
+    try {
+      await adminOp({ table: 'video_moments', op: 'delete', id });
+      showToast(`Video "${t?.title}" dihapus.`, 'info');
+    } catch (err) { reportError(err); }
   };
 
   // --- GRADUATION ---
   const updateGraduationInfo = async (info: Partial<Omit<GraduationData, 'gallery' | 'graduates'>>) => {
+    if (!ensureApi()) return;
     setGraduationData((p) => ({ ...p, ...info }));
-    if (!ensureSupabase()) return;
-    const row: any = {}; if (info.mainBanner !== undefined) row.main_banner = info.mainBanner; if (info.title !== undefined) row.title = info.title; if (info.cohortName !== undefined) row.cohort_name = info.cohortName; if (info.date !== undefined) row.date = info.date; if (info.location !== undefined) row.location = info.location; if (info.description !== undefined) row.description = info.description;
-    const { error } = await supabase!.from('graduation_info').update(row).eq('id', 1);
-    if (error) showToast(error.message, 'error'); else showToast('Info wisuda diperbarui!');
+    const row: any = {};
+    if (info.mainBanner !== undefined) row.main_banner = info.mainBanner;
+    if (info.title !== undefined) row.title = info.title;
+    if (info.cohortName !== undefined) row.cohort_name = info.cohortName;
+    if (info.date !== undefined) row.date = info.date;
+    if (info.location !== undefined) row.location = info.location;
+    if (info.description !== undefined) row.description = info.description;
+    try {
+      await adminOp({ table: 'graduation_info', op: 'update', id: '1', row });
+      showToast('Info wisuda diperbarui!');
+    } catch (err) { reportError(err); }
   };
   const updateGraduatesList = async (names: string[]) => {
+    if (!ensureApi()) return;
     setGraduationData((p) => ({ ...p, graduates: names }));
-    if (!ensureSupabase()) return;
-    await supabase!.from('graduates').delete().neq('id', 0);
-    const rows = names.map((name, idx) => ({ name, position: idx + 1 }));
-    if (rows.length) { const { error } = await supabase!.from('graduates').insert(rows); if (error) showToast(error.message, 'error'); }
-    showToast('Daftar wisudawan diperbarui!');
+    try {
+      await adminOp({
+        table: 'graduates',
+        op: 'replace',
+        rows: names.map((name, idx) => ({ name, position: idx + 1 })),
+      });
+      showToast('Daftar wisudawan diperbarui!');
+    } catch (err) { reportError(err); }
   };
   const addGraduationGraduate = async (name: string) => {
     if (!name.trim()) return;
+    if (!ensureApi()) return;
     const next = [...graduationData.graduates, name.trim()];
     setGraduationData((p) => ({ ...p, graduates: next }));
-    if (!ensureSupabase()) return;
-    const { error } = await supabase!.from('graduates').insert({ name: name.trim(), position: next.length });
-    if (error) showToast(error.message, 'error'); else showToast('Wisudawan ditambah!');
+    try {
+      await adminOp({ table: 'graduates', op: 'insert', row: { name: name.trim(), position: next.length } });
+      showToast('Wisudawan ditambah!');
+    } catch (err) { reportError(err); }
   };
   const removeGraduationGraduate = async (index: number) => {
+    if (!ensureApi()) return;
     const name = graduationData.graduates[index];
     const next = graduationData.graduates.filter((_, i) => i !== index);
     setGraduationData((p) => ({ ...p, graduates: next }));
-    if (!ensureSupabase()) return;
-    // simplest: delete and reinsert to fix positions
-    await supabase!.from('graduates').delete().neq('id', 0);
-    const rows = next.map((n, i) => ({ name: n, position: i + 1 }));
-    if (rows.length) await supabase!.from('graduates').insert(rows);
-    showToast(`"${name}" dihapus`, 'info');
+    try {
+      await adminOp({
+        table: 'graduates',
+        op: 'replace',
+        rows: next.map((n, i) => ({ name: n, position: i + 1 })),
+      });
+      showToast(`"${name}" dihapus`, 'info');
+    } catch (err) { reportError(err); }
   };
   const addGraduationGallery = async (photo: { image: string; caption: string }) => {
+    if (!ensureApi()) return;
     const id = `grad-${Date.now()}`;
     setGraduationData((p) => ({ ...p, gallery: [...p.gallery, { id, ...photo }] }));
-    if (!ensureSupabase()) return;
-    const { error } = await supabase!.from('graduation_gallery').insert({ id, image: photo.image, caption: photo.caption });
-    if (error) showToast(error.message, 'error'); else showToast('Foto galeri ditambah!');
+    try {
+      await adminOp({
+        table: 'graduation_gallery',
+        op: 'insert',
+        row: { id, image: photo.image, caption: photo.caption },
+      });
+      showToast('Foto galeri ditambah!');
+    } catch (err) { reportError(err); }
   };
   const updateGraduationGallery = async (id: string, photo: Partial<{ image: string; caption: string }>) => {
+    if (!ensureApi()) return;
     setGraduationData((p) => ({ ...p, gallery: p.gallery.map((g) => g.id === id ? { ...g, ...photo } : g) }));
-    if (!ensureSupabase()) return;
-    const row: any = {}; if (photo.image !== undefined) row.image = photo.image; if (photo.caption !== undefined) row.caption = photo.caption;
-    const { error } = await supabase!.from('graduation_gallery').update(row).eq('id', id);
-    if (error) showToast(error.message, 'error'); else showToast('Foto diperbarui!');
+    const row: any = {};
+    if (photo.image !== undefined) row.image = photo.image;
+    if (photo.caption !== undefined) row.caption = photo.caption;
+    try {
+      await adminOp({ table: 'graduation_gallery', op: 'update', id, row });
+      showToast('Foto diperbarui!');
+    } catch (err) { reportError(err); }
   };
   const deleteGraduationGallery = async (id: string) => {
+    if (!ensureApi()) return;
     setGraduationData((p) => ({ ...p, gallery: p.gallery.filter((g) => g.id !== id) }));
-    if (!ensureSupabase()) return;
-    const { error } = await supabase!.from('graduation_gallery').delete().eq('id', id);
-    if (error) showToast(error.message, 'error'); else showToast('Foto dihapus.', 'info');
+    try {
+      await adminOp({ table: 'graduation_gallery', op: 'delete', id });
+      showToast('Foto dihapus.', 'info');
+    } catch (err) { reportError(err); }
   };
 
   const resetToDefaultData = async () => {
-    if (!ensureSupabase()) { setStudents(STUDENTS); setMoments(MOMENTS_FEED); setGraduationData(GRADUATION_DATA); setVideoMoments(VIDEO_MOMENTS); showToast('Reset lokal', 'info'); return; }
-    showToast('Reset via Supabase: jalankan seed.sql ulang', 'info');
+    showToast('Untuk reset data, jalankan db/seed.sql di Neon (repo public).', 'info');
   };
 
   return (
-    <DataContext.Provider value={{ students, moments, graduationData, videoMoments, isLoading, isSupabaseConfigured, addMoment, updateMoment, deleteMoment, addVideoMoment, updateVideoMoment, deleteVideoMoment, addStudent, updateStudent, deleteStudent, updateGraduationInfo, updateGraduatesList, addGraduationGraduate, removeGraduationGraduate, addGraduationGallery, updateGraduationGallery, deleteGraduationGallery, resetToDefaultData, toasts, dismissToast, showToast, refresh: fetchAll }}>
+    <DataContext.Provider value={{ students, moments, graduationData, videoMoments, isLoading, isApiConfigured, addMoment, updateMoment, deleteMoment, addVideoMoment, updateVideoMoment, deleteVideoMoment, addStudent, updateStudent, deleteStudent, updateGraduationInfo, updateGraduatesList, addGraduationGraduate, removeGraduationGraduate, addGraduationGallery, updateGraduationGallery, deleteGraduationGallery, resetToDefaultData, toasts, dismissToast, showToast, refresh: fetchAll }}>
       {children}
     </DataContext.Provider>
   );

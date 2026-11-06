@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DataProvider } from './context/DataContext';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { AdminLogin } from './components/AdminLogin';
+import { clearToken, getToken } from './lib/api';
 
 function getSecretPath(): string {
   const raw = (import.meta as any).env?.VITE_ADMIN_SECRET_PATH as string | undefined;
@@ -34,11 +35,11 @@ function NotFound() {
 }
 
 export default function App() {
-  const [isAuthed, setIsAuthed] = useState<boolean>(() => sessionStorage.getItem('admin_auth') === 'true');
+  const [isAuthed, setIsAuthed] = useState<boolean>(() => sessionStorage.getItem('admin_auth') === 'true' && Boolean(getToken()));
   const [allowed, setAllowed] = useState<boolean>(() => isAllowedPath());
 
   useEffect(() => {
-    const checkAuth = () => setIsAuthed(sessionStorage.getItem('admin_auth') === 'true');
+    const checkAuth = () => setIsAuthed(sessionStorage.getItem('admin_auth') === 'true' && Boolean(getToken()));
     const checkPath = () => setAllowed(isAllowedPath());
     window.addEventListener('storage', checkAuth);
     window.addEventListener('popstate', checkPath);
@@ -62,6 +63,7 @@ export default function App() {
   }
 
   const handleLogout = () => {
+    clearToken();
     sessionStorage.removeItem('admin_auth');
     setIsAuthed(false);
   };

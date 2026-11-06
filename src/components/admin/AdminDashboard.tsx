@@ -30,7 +30,7 @@ interface AdminDashboardProps {
 type AdminTab = 'moments' | 'videos' | 'biodata' | 'before-after' | 'graduation' | 'visitors';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const { students, moments, videoMoments, graduationData, resetToDefaultData, toasts, dismissToast, isSupabaseConfigured } = useDataStore();
+  const { students, moments, videoMoments, graduationData, resetToDefaultData, toasts, dismissToast, isApiConfigured } = useDataStore();
   const [activeTab, setActiveTab] = useState<AdminTab>('moments');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
@@ -94,7 +94,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 </span>
               </div>
               <p className="text-[11px] text-[#9A8678]">
-                Buku Kenangan Angkatan Khalid Bin Walid • {isSupabaseConfigured ? 'Supabase Sync (Global)' : 'Mode Lokal (isi ENV Supabase)'}
+                Buku Kenangan Angkatan Khalid Bin Walid • {isApiConfigured ? 'Neon Sync (Global)' : 'API belum terhubung'}
               </p>
             </div>
           </div>
@@ -104,10 +104,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               type="button"
               onClick={() => setShowResetConfirm(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#4B4038] hover:border-[#9A8678] bg-[#202940] text-[#9A8678] hover:text-[#CAAA98] text-xs font-semibold transition-colors cursor-pointer"
-              title="Kembalikan semua data ke sampel awal"
+              title="Cara mengembalikan data ke sampel awal"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Reset Sampel Data</span>
+              <span className="hidden sm:inline">Info Reset</span>
             </button>
 
             <button
@@ -223,10 +223,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
             <div>
               <h4 className="text-base font-bold text-white">
-                Reset ke Data Sampel Awal?
+                Reset Data via Neon
               </h4>
               <p className="text-xs text-[#9A8678] mt-1">
-                Tindakan ini akan mengembalikan data Momen, Video, Biodata Siswa, Before-After, dan Wisuda ke data awal bawaan sistem.
+                Reset otomatis dari dashboard sudah tidak tersedia. Untuk mengembalikan data sampel, jalankan <span className="font-mono">db/seed.sql</span> di Neon SQL Editor (repo public). Tindakan ini tidak mengubah data sekarang.
               </p>
             </div>
 
@@ -246,7 +246,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 }}
                 className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer"
               >
-                Ya, Reset Sekarang
+                Mengerti
               </button>
             </div>
           </div>

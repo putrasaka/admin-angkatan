@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useDataStore } from '../../context/DataContext';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { authFetch } from '../../lib/api';
 import { Trash2, Loader2 } from 'lucide-react';
 
 interface VisitorLog {
@@ -13,25 +13,29 @@ interface VisitorLog {
 }
 
 export const ManageVisitorsTab: React.FC = () => {
-  const { showToast } = useDataStore();
+  const { showToast, isApiConfigured } = useDataStore();
   const [rows, setRows] = useState<VisitorLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!isSupabaseConfigured || !supabase) {
+    if (!isApiConfigured) {
       setRows([]);
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('visitor_logs')
-      .select('*')
-      .order('logged_in_at', { ascending: false });
-    if (error) showToast(error.message, 'error');
-    else setRows((data as VisitorLog[]) ?? []);
-    setIsLoading(false);
-  }, [showToast]);
+    try {
+      const res = await authFetch('/api/admin?table=visitor_logs');
+      const data = await res.json();
+      setRows(Array.isArray(data) ? data : []);
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+      setRows([]);
+    } finally {
+      setIsLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isApiConfigured]);
 
   useEffect(() => {
     load();
@@ -39,12 +43,15 @@ export const ManageVisitorsTab: React.FC = () => {
 
   const handleDelete = async (row: VisitorLog) => {
     if (!window.confirm(`Yakin ingin menghapus log pengunjung "${row.name}"?`)) return;
-    if (!supabase) return;
-    const { error } = await supabase.from('visitor_logs').delete().eq('id', row.id);
-    if (error) showToast(error.message, 'error');
-    else {
+    try {
+      await authFetch('/api/admin', {
+        method: 'POST',
+        body: JSON.stringify({ table: 'visitor_logs', op: 'delete', id: row.id }),
+      });
       showToast(`Log "${row.name}" dihapus.`, 'info');
       load();
+    } catch (err) {
+      showToast((err as Error).message, 'error');
     }
   };
 
@@ -79,14 +86,14 @@ export const ManageVisitorsTab: React.FC = () => {
       )}
 
       {/* Unconfigured */}
-      {!isLoading && !isSupabaseConfigured && (
+      {!isLoading && !isApiConfigured && (
         <div className="p-8 text-center bg-[#202940]/50 border border-dashed border-[#4B4038] rounded-2xl text-xs text-[#9A8678]">
-          Supabase belum dikonfigurasi (isi ENV). Data pengunjung tidak tersedia di mode lokal.
+          API belum terhubung. Data pengunjung tidak tersedia.
         </div>
       )}
 
       {/* Table */}
-      {!isLoading && isSupabaseConfigured && rows.length > 0 && (
+      {!isLoading && isApiConfigured && rows.length > 0 && (
         <div className="overflow-x-auto rounded-2xl border border-[#4B4038]">
           <table className="w-full text-left text-xs">
             <thead>
@@ -130,7 +137,7 @@ export const ManageVisitorsTab: React.FC = () => {
       )}
 
       {/* Empty */}
-      {!isLoading && isSupabaseConfigured && rows.length === 0 && (
+      {!isLoading && isApiConfigured && rows.length === 0 && (
         <div className="p-8 text-center bg-[#202940]/50 border border-dashed border-[#4B4038] rounded-2xl text-xs text-[#9A8678]">
           Belum ada log pengunjung.
         </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Lock, User, Eye, EyeOff } from 'lucide-react';
+import { setToken } from '../lib/api';
 
 interface AdminLoginProps {
   onLogin: () => void;
@@ -11,18 +12,25 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
   const [show, setShow] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const envUser = (import.meta as any).env?.VITE_ADMIN_USERNAME as string | undefined;
-    const envPass = (import.meta as any).env?.VITE_ADMIN_PASSWORD as string | undefined;
-    const validUser = envUser && envUser !== '' ? envUser : 'admin';
-    const validPass = envPass && envPass !== '' ? envPass : 'admin123';
-    if (username.trim() === validUser && password === validPass) {
+    setError('');
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.token) {
+        setError(data?.error ?? 'Username atau password salah.');
+        return;
+      }
+      setToken(data.token);
       sessionStorage.setItem('admin_auth', 'true');
-      setError('');
       onLogin();
-    } else {
-      setError('Username atau password salah.');
+    } catch {
+      setError('Gagal terhubung ke server.');
     }
   };
 
