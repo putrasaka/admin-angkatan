@@ -6,6 +6,7 @@ import { ManageBiodataTab } from './ManageBiodataTab';
 import { ManageBeforeAfterTab } from './ManageBeforeAfterTab';
 import { ManageGraduationTab } from './ManageGraduationTab';
 import { ManageVisitorsTab } from './ManageVisitorsTab';
+import { ManageFeedbackTab } from './ManageFeedbackTab';
 import {
   Camera,
   Video,
@@ -14,6 +15,7 @@ import {
   GraduationCap,
   UserRound,
   Eye,
+  MessageSquare,
   ShieldCheck,
   RotateCcw,
   Sparkles,
@@ -27,7 +29,7 @@ interface AdminDashboardProps {
   onLogout: () => void;
 }
 
-type AdminTab = 'moments' | 'videos' | 'biodata' | 'before-after' | 'graduation' | 'visitors';
+type AdminTab = 'moments' | 'videos' | 'biodata' | 'before-after' | 'graduation' | 'visitors' | 'feedback';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const { students, moments, videoMoments, graduationData, resetToDefaultData, toasts, dismissToast, isApiConfigured } = useDataStore();
@@ -41,6 +43,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     { id: 'before-after', label: 'Before - After', icon: ArrowLeftRight, count: students.length },
     { id: 'graduation', label: 'Wisuda & Galeri', icon: GraduationCap, count: graduationData.gallery.length },
     { id: 'visitors', label: 'Pengunjung', icon: UserRound },
+    { id: 'feedback', label: 'Masukan', icon: MessageSquare },
   ];
 
   return (
@@ -210,6 +213,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           {activeTab === 'before-after' && <ManageBeforeAfterTab />}
           {activeTab === 'graduation' && <ManageGraduationTab />}
           {activeTab === 'visitors' && <ManageVisitorsTab />}
+          {activeTab === 'feedback' && <ManageFeedbackTab />}
         </div>
       </main>
 

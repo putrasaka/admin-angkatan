@@ -10,6 +10,7 @@ const COLUMNS: Record<string, string[]> = {
   graduation_gallery: ['id', 'image', 'caption', 'created_at'],
   video_moments: ['id', 'title', 'description', 'video_url', 'poster_url', 'duration', 'date', 'created_at'],
   visitor_logs: ['id', 'name', 'age', 'previous_school', 'current_school', 'logged_in_at'],
+  feedback: ['id', 'visitor_name', 'phone', 'message', 'created_at'],
 };
 
 const INSERTABLE = new Set(['students', 'moments', 'graduation_gallery', 'video_moments', 'graduates']);
@@ -48,11 +49,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === 'GET') {
       const table = String(req.query.table ?? '');
-      if (table !== 'visitor_logs') {
-        return res.status(400).json({ error: 'Tabel tidak diizinkan' });
+      if (table === 'visitor_logs') {
+        const rows = await sql`select * from visitor_logs order by logged_in_at desc`;
+        return res.status(200).json(rows);
       }
-      const rows = await sql`select * from visitor_logs order by logged_in_at desc`;
-      return res.status(200).json(rows);
+      if (table === 'feedback') {
+        const rows = await sql`select * from feedback order by created_at desc`;
+        return res.status(200).json(rows);
+      }
+      return res.status(400).json({ error: 'Tabel tidak diizinkan' });
     }
 
     if (req.method !== 'POST') {
