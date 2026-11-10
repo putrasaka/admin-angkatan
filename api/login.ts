@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { rateLimit, rateLimitKey } from '../server/rate-limit';
-import { createAdminSession } from '../server/admin-session';
+import { rateLimit, rateLimitKey } from '../server/rate-limit.js';
+import { createAdminSession } from '../server/admin-session.js';
 
 // POST /api/login — verifikasi kredensial admin di server, balas sesi
 // bertanda tangan yang berlaku 8 jam.

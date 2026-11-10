@@ -1,13 +1,22 @@
+// @ts-check
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 // Sesi admin bertanda tangan. ADMIN_TOKEN hanya jadi kunci HMAC di server,
 // tidak pernah dikirim mentah ke browser.
 
-function sign(encoded: string, secret: string): string {
+/**
+ * @param {string} encoded
+ * @param {string} secret
+ */
+function sign(encoded, secret) {
   return createHmac('sha256', secret).update(encoded).digest('hex');
 }
 
-export function createAdminSession(secret: string, ttlSeconds = 28800): string {
+/**
+ * @param {string} secret
+ * @param {number} [ttlSeconds]
+ */
+export function createAdminSession(secret, ttlSeconds = 28800) {
   const payload = Buffer.from(
     JSON.stringify({ sub: 'admin', exp: Math.floor(Date.now() / 1000) + ttlSeconds }),
     'utf8'
@@ -15,7 +24,11 @@ export function createAdminSession(secret: string, ttlSeconds = 28800): string {
   return `${payload}.${sign(payload, secret)}`;
 }
 
-export function verifyAdminSession(authHeader: string | undefined, secret: string | undefined): boolean {
+/**
+ * @param {string | undefined} authHeader
+ * @param {string | undefined} secret
+ */
+export function verifyAdminSession(authHeader, secret) {
   if (!secret || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) return false;
 
   const token = authHeader.slice(7).trim();
@@ -28,7 +41,7 @@ export function verifyAdminSession(authHeader: string | undefined, secret: strin
   const b = Buffer.from(expected, 'utf8');
   if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
 
-  let payload: any;
+  let payload;
   try {
     payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
   } catch {

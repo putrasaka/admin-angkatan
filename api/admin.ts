@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
-import { verifyAdminSession } from '../server/admin-session';
+import { verifyAdminSession } from '../server/admin-session.js';
 
 // Endpoint CRUD admin. Semua request wajib header: Authorization: Bearer <ADMIN_TOKEN>
 const COLUMNS: Record<string, string[]> = {

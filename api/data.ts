@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
-import { verifyAdminSession } from '../server/admin-session';
-import { signMediaUrl } from '../server/media-sign';
+import { verifyAdminSession } from '../server/admin-session.js';
+import { signMediaUrl } from '../server/media-sign.js';
 
 // GET /api/data — metadata untuk dashboard admin. Wajib sesi admin.
 // Kolom gambar/video yang masih berupa data URI diganti URL /api/media supaya
