@@ -15,26 +15,37 @@ export const ManageFeedbackTab: React.FC = () => {
   const { showToast, isApiConfigured } = useDataStore();
   const [rows, setRows] = useState<FeedbackRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!isApiConfigured) {
-      setRows([]);
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const res = await authFetch('/api/admin?table=feedback');
-      const data = await res.json();
-      setRows(Array.isArray(data) ? data : []);
-    } catch (err) {
-      showToast((err as Error).message, 'error');
-      setRows([]);
-    } finally {
-      setIsLoading(false);
-    }
+  const loadPage = useCallback(
+    async (nextOffset: number, append: boolean) => {
+      if (!isApiConfigured) {
+        setRows([]);
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const res = await authFetch(`/api/admin?table=feedback&limit=100&offset=${nextOffset}`);
+        const data = await res.json();
+        const page: FeedbackRow[] = Array.isArray(data) ? data : [];
+        setRows((prev) => (append ? [...prev, ...page] : page));
+        setOffset(nextOffset);
+        setHasMore(page.length === 100);
+      } catch (err) {
+        showToast((err as Error).message, 'error');
+        if (!append) setRows([]);
+        setHasMore(false);
+      } finally {
+        setIsLoading(false);
+      }
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isApiConfigured]);
+    [isApiConfigured]
+  );
+
+  const load = useCallback(() => loadPage(0, false), [loadPage]);
 
   useEffect(() => {
     load();
@@ -77,7 +88,7 @@ export const ManageFeedbackTab: React.FC = () => {
       </div>
 
       {/* Loading */}
-      {isLoading && (
+      {isLoading && rows.length === 0 && (
         <div className="p-8 text-center bg-[#202940]/50 border border-dashed border-[#4B4038] rounded-2xl text-xs text-[#9A8678] flex items-center justify-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span>Memuat masukan...</span>
@@ -92,7 +103,7 @@ export const ManageFeedbackTab: React.FC = () => {
       )}
 
       {/* Table */}
-      {!isLoading && isApiConfigured && rows.length > 0 && (
+      {isApiConfigured && rows.length > 0 && (
         <div className="overflow-x-auto rounded-2xl border border-[#4B4038]">
           <table className="w-full text-left text-xs">
             <thead>
@@ -130,6 +141,19 @@ export const ManageFeedbackTab: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {hasMore && (
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => loadPage(offset + 100, true)}
+            disabled={isLoading}
+            className="px-4 py-2 rounded-xl bg-[#4B4038]/60 hover:bg-[#4B4038] border border-[#9A8678]/40 text-xs font-semibold text-[#CAAA98] transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {isLoading ? 'Memuat...' : 'Muat lagi'}
+          </button>
         </div>
       )}
 

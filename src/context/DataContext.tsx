@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { Student, Moment, GraduationData, VideoMoment } from '../types';
 import { STUDENTS, MOMENTS_FEED, GRADUATION_DATA, VIDEO_MOMENTS } from '../data/dummyData';
 import { mapStudentRow, mapMomentRow, mapVideoRow, mapGalleryRow, mapGraduationInfo, toStudentRow, toMomentRow, toVideoRow } from '../lib/mappers';
-import { adminOp, getToken } from '../lib/api';
+import { adminOp, authFetch, getToken } from '../lib/api';
 
 export interface ToastNotification { id: string; message: string; type: 'success' | 'error' | 'info'; }
 
@@ -53,7 +53,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/data', { cache: 'no-store' });
+      const res = await authFetch('/api/data', { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 

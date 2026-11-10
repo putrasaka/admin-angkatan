@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
+import { verifyAdminSession } from '../server/admin-session';
 
 // Endpoint CRUD admin. Semua request wajib header: Authorization: Bearer <ADMIN_TOKEN>
 const COLUMNS: Record<string, string[]> = {
@@ -25,15 +26,14 @@ function isMediaRef(value: unknown): boolean {
 }
 
 function authorized(req: VercelRequest): boolean {
-  const token = process.env.ADMIN_TOKEN;
-  return Boolean(token) && req.headers.authorization === `Bearer ${token}`;
+  return verifyAdminSession(req.headers.authorization, process.env.ADMIN_TOKEN);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store');
 
   if (!process.env.ADMIN_TOKEN) {
-    return res.status(500).json({ error: 'ADMIN_TOKEN belum diset di environment' });
+    return res.status(500).json({ error: 'Server belum dikonfigurasi' });
   }
   if (!authorized(req)) {
     return res.status(401).json({ error: 'Tidak berwenang' });
@@ -41,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
-    return res.status(500).json({ error: 'DATABASE_URL belum diset di environment' });
+    return res.status(500).json({ error: 'Server belum dikonfigurasi' });
   }
 
   const sql = neon(connectionString);
@@ -49,12 +49,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === 'GET') {
       const table = String(req.query.table ?? '');
+      const limitRaw = Number(req.query.limit ?? 100);
+      const limit = Math.min(
+        Math.max(Number.isFinite(limitRaw) ? Math.trunc(limitRaw) : 100, 1),
+        200
+      );
+      const offsetRaw = Number(req.query.offset ?? 0);
+      const offset = Math.max(Number.isFinite(offsetRaw) ? Math.trunc(offsetRaw) : 0, 0);
+
       if (table === 'visitor_logs') {
-        const rows = await sql`select * from visitor_logs order by logged_in_at desc`;
+        const rows = await sql.query(
+          'select * from visitor_logs order by logged_in_at desc limit $1 offset $2',
+          [limit, offset]
+        );
         return res.status(200).json(rows);
       }
       if (table === 'feedback') {
-        const rows = await sql`select * from feedback order by created_at desc`;
+        const rows = await sql.query(
+          'select * from feedback order by created_at desc limit $1 offset $2',
+          [limit, offset]
+        );
         return res.status(200).json(rows);
       }
       return res.status(400).json({ error: 'Tabel tidak diizinkan' });

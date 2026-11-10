@@ -11,6 +11,12 @@ export async function authFetch(input: string, init: RequestInit = {}): Promise<
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
 
   const res = await fetch(input, { ...init, headers });
+  if (res.status === 401) {
+    clearToken();
+    sessionStorage.removeItem('admin_auth');
+    window.location.reload();
+    throw new Error('Sesi berakhir');
+  }
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {

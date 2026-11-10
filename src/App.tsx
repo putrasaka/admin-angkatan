@@ -68,9 +68,11 @@ export default function App() {
     setIsAuthed(false);
   };
 
-  return (
+  return isAuthed ? (
     <DataProvider>
-      {isAuthed ? <AdminDashboard onLogout={handleLogout} /> : <AdminLogin onLogin={() => setIsAuthed(true)} />}
+      <AdminDashboard onLogout={handleLogout} />
     </DataProvider>
+  ) : (
+    <AdminLogin onLogin={() => setIsAuthed(true)} />
   );
 }
